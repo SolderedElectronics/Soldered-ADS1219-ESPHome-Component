@@ -1,0 +1,58 @@
+# Reads the Soldered ADS1219 24-bit ADC with an external voltage reference on the REFP / REFN pins instead of the
+# internal 2.048 V one.
+#
+# Wiring: reference voltage source + to REFP, - to REFN (usually GND). Set `reference_voltage` below to exactly the
+# voltage between REFP and REFN - every reading is scaled by it, so any error in this value shows up 1:1 in the
+# results. Keep REFP at or below AVDD (the board supply) and the REFP - REFN difference at 0.5 V or more.
+#
+# With the external reference and gain 1 the input range is +/- reference_voltage (gain 4: +/- reference_voltage / 4).
+# Inputs must still stay within AGND - 0.1 V and AVDD + 0.1 V.
+
+esphome:
+  name: soldered-ads1219-ext-ref
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+
+logger:
+  level: DEBUG
+  hardware_uart: UART0
+
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components: [ads1219]
+
+i2c:
+  sda: GPIO8
+  scl: GPIO9
+  scan: true
+
+ads1219:
+  - id: adc
+    address: 0x40
+    voltage_reference: external
+    reference_voltage: 3.3V  # voltage between REFP and REFN, change to match your source
+
+sensor:
+  - platform: ads1219
+    ads1219_id: adc
+    name: "ADS1219 AIN0"
+    multiplexer: A0_GND
+    update_interval: 1s
+
+  - platform: ads1219
+    ads1219_id: adc
+    name: "ADS1219 AIN1"
+    multiplexer: A1_GND
+    update_interval: 1s
+
+  # Both inputs shorted to AVDD / 2 internally: should read close to 0 V, shows the ADC's own offset
+  - platform: ads1219
+    ads1219_id: adc
+    name: "ADS1219 Offset"
+    multiplexer: SHORTED
+    update_interval: 10s

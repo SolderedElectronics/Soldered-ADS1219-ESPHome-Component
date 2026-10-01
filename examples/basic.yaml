@@ -1,5 +1,12 @@
+# Reads the Soldered ADS1219 24-bit ADC: AIN0 and AIN1 single-ended against GND, and AIN2 - AIN3 differential with
+# gain 4, using the internal 2.048 V reference. See external_reference.yaml for the external REFP / REFN reference.
+#
+# With the internal reference and gain 1 the input range is +/- 2.048 V (gain 4: +/- 0.512 V). Inputs must stay
+# within AGND - 0.1 V and AVDD + 0.1 V regardless. To measure a wider range, feed a reference to REFP/REFN and set
+# `voltage_reference: external` with the matching `reference_voltage`.
+
 esphome:
-  name: soldered-esphome-component-template-test
+  name: soldered-ads1219-basic
 
 esp32:
   board: esp32-s3-devkitc-1
@@ -8,11 +15,43 @@ esp32:
 
 logger:
   level: DEBUG
+  hardware_uart: UART0
 
 external_components:
   - source:
       type: local
       path: ../components
-    components: [soldered_esphome_component_template]
+    components: [ads1219]
 
-soldered_esphome_component_template:
+i2c:
+  sda: GPIO8
+  scl: GPIO9
+  scan: true
+
+ads1219:
+  - id: adc
+    address: 0x40
+    voltage_reference: internal
+    # voltage_reference: external
+    # reference_voltage: 3.3V
+
+sensor:
+  - platform: ads1219
+    ads1219_id: adc
+    name: "ADS1219 AIN0"
+    multiplexer: A0_GND
+    update_interval: 1s
+
+  - platform: ads1219
+    ads1219_id: adc
+    name: "ADS1219 AIN1"
+    multiplexer: A1_GND
+    sample_rate: 90
+    update_interval: 1s
+
+  - platform: ads1219
+    ads1219_id: adc
+    name: "ADS1219 AIN2 - AIN3"
+    multiplexer: A2_A3
+    gain: 4
+    update_interval: 5s

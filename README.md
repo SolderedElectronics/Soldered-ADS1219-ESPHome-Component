@@ -1,31 +1,23 @@
-# Soldered NAZIV PROIZVODA ESPHome Component
+# Soldered ADS1219 ESPHome Component
 
-| ![Product name](https://upload.wikimedia.org/wikipedia/commons/8/8f/Example_image.svg) |
-| :------------------------------------------------------------------------------------: |
-|                      [NAZIV PROIZVODA](https://www.solde.red/SKU)                      |
+| ![ADS1219 ADC](https://cms.soldered.com/products/333380/media/333380_photo_8c082e.webp) |
+| :-------------------------------------------------------------------------------------: |
+|                       [ADS1219 ADC](https://www.solde.red/333380)                        |
 
-OPIS PROIZVODA + LINK NA [Qwiic ecosystem](https://soldered.com/collections/qwiic-ecosystem).
+Precision 24-bit delta-sigma ADC board based on the Texas Instruments ADS1219, with a programmable gain amplifier
+(gain 1 or 4), four inputs usable as four single-ended or two differential channels, selectable data rates from 20 to
+1000 SPS and an internal 2.048 V reference. It runs from 2.3 V - 5.5 V, connects over I2C and is part of the
+[Qwiic ecosystem](https://soldered.com/collections/qwiic-ecosystem).
 
-External ESPHome component for NAZIV PROIZVODA.
+External ESPHome component for the Soldered ADS1219 board. It is a port of the
+[Soldered ADS1219 Arduino library](https://github.com/SolderedElectronics/Soldered-ADS1219-Arduino-Library) and works
+the same way as ESPHome's built-in [`ads1115`](https://esphome.io/components/sensor/ads1115/) component: one `ads1219`
+hub per chip, and one [sensor](https://esphome.io/components/sensor/) per input channel, each publishing a voltage in
+volts.
 
-### Using the template
-
-Before publishing a new component make sure to replace:
-
-- `NAZIV PROIZVODA`, `OPIS PROIZVODA`, product image, and SKU link in this README
-- the `components/soldered_esphome_component_template/` directory name with the real component name
-- `soldered_esphome_component_template` namespace, `SolderedEsphomeComponentTemplate` class name, and `CODEOWNERS` in `__init__.py`, matching names in the `.h`/`.cpp` files and their `#include`
-- `CONFIG_SCHEMA` and `to_code()` in `__init__.py` with the real config options and codegen
-- the `TAG` string and `dump_config()` output in the `.cpp` file
-- `github://SolderedElectronics/<repo>` source path and the sample config in the "Usage" section below
-- `examples/basic.yaml` (rename/add examples as needed, keep `external_components.source.path` pointing at `../components`)
-- `@file`, `@brief`, `@author` Doxygen comments in the `.h`/`.cpp` files to describe the real API
-
-Also make sure to add more examples if the component supports multiple boards/modes (see `Soldered-Inkplate-ESPHome` for a repo with several board variants).
-
-Run `pip install clang-format==13.0.1 && find components -name "*.cpp" -o -name "*.h" | xargs clang-format -i` before committing to auto-format the component against ESPHome's own style (`.clang-format`, copied from the ESPHome core repo). CI runs the same check on every push/PR via `.github/workflows/format_check.yml` and fails on unformatted code. `.github/workflows/build.yml` compiles every YAML under `examples/` on every push/PR.
-
-**Remove this section of README after everything is done!**
+Every sensor runs its own single-shot conversion with its own multiplexer, gain and data rate, so channels with
+different settings can share one chip. Conversions are queued and run one after another without blocking the ESPHome
+main loop.
 
 ## Repository Contents
 
@@ -38,17 +30,78 @@ Reference this repo directly from your own ESPHome YAML (no need to clone it loc
 
 ```yaml
 external_components:
-  - source: github://SolderedElectronics/<repo>
-    components: [soldered_esphome_component_template]
+  - source: github://SolderedElectronics/Soldered-ADS1219-ESPHome-Component
+    components: [ads1219]
 
-soldered_esphome_component_template:
+i2c:
+  sda: GPIO21
+  scl: GPIO22
+
+ads1219:
+  - id: adc
+    address: 0x40
+
+sensor:
+  - platform: ads1219
+    ads1219_id: adc
+    name: "AIN0"
+    multiplexer: A0_GND
+    update_interval: 1s
+
+  - platform: ads1219
+    ads1219_id: adc
+    name: "AIN2 - AIN3"
+    multiplexer: A2_A3
+    gain: 4
+    update_interval: 5s
 ```
 
-See [`examples/basic.yaml`](examples/basic.yaml) for a full working example.
+See [`examples/basic.yaml`](examples/basic.yaml) for a full working example with the internal reference, and [`examples/external_reference.yaml`](examples/external_reference.yaml) for one with an external reference on REFP / REFN.
+
+### Input range
+
+The measurable range is +/- VREF / gain, so +/- 2.048 V at gain 1 and +/- 0.512 V at gain 4 with the internal
+reference. Independent of the reference, no input may go below AGND - 0.1 V or above AVDD + 0.1 V, and a single-ended
+measurement (`Ax_GND`) can only read positive voltages, so it covers 0 V - VREF / gain. To measure up to the supply
+voltage, connect a reference to the REFP / REFN pins and set `voltage_reference: external` with the matching
+`reference_voltage`.
+
+### Configuration variables
+
+#### Hub (`ads1219:`)
+
+- **id** (*Optional*, [ID](https://esphome.io/guides/configuration-types#config-id)): ID of the hub, used by the sensors
+  in `ads1219_id`. Required if there is more than one ADS1219.
+- **address** (*Optional*, int): I2C address of the board. Defaults to `0x40`; can be set to `0x40` - `0x4F` with the
+  A0 / A1 address pins.
+- **voltage_reference** (*Optional*, string): `internal` (fixed 2.048 V) or `external` (voltage between the REFP and
+  REFN pins). Defaults to `internal`.
+- **reference_voltage** (*Optional*, voltage): voltage between REFP and REFN, e.g. `3.3V`. Required with
+  `voltage_reference: external`, not allowed with `internal`.
+- **i2c_id** (*Optional*, [ID](https://esphome.io/guides/configuration-types#config-id)): I2C bus to use, if there is
+  more than one.
+
+The chip is soft-reset on every boot, so no state from a previous run is kept.
+
+#### Sensor (`platform: ads1219`)
+
+- **ads1219_id** (*Optional*, [ID](https://esphome.io/guides/configuration-types#config-id)): ID of the hub. Required if
+  there is more than one ADS1219.
+- **multiplexer** (**Required**, string): input to measure, one of:
+  - `A0_GND`, `A1_GND`, `A2_GND`, `A3_GND` - single-ended, input against AGND
+  - `A0_A1`, `A2_A3`, `A1_A2` - differential, first input minus second
+  - `SHORTED` - both inputs shorted to AVDD / 2, reads the offset of the ADC itself
+- **gain** (*Optional*, int): PGA gain, `1` or `4`. Defaults to `1`.
+- **sample_rate** (*Optional*, int): data rate in samples per second, `20`, `90`, `330` or `1000`. Defaults to `20`
+  (lowest noise, ~50 ms per conversion).
+- **update_interval** (*Optional*, [Time](https://esphome.io/guides/configuration-types#config-time)): how often to
+  read the channel. Defaults to `60s`.
+- All other options from [Sensor](https://esphome.io/components/sensor/#config-sensor) (`name`, `filters`,
+  `accuracy_decimals`, ...).
 
 ### Hardware design
 
-You can find hardware design for this board in the _NAZIV PROIZVODA_ hardware repository.
+Hardware design files for this board are not published yet.
 
 ### Documentation
 
